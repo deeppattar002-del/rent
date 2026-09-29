@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Rent Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#3b82f6',
+            ok: '#22c55e',
+            okbg: '#dcfce7',
+            bad: '#ef4444',
+            badbg: '#fee2e2',
+            warn: '#f59e0b',
+            warnbg: '#fef3c7',
+            line: '#e5e7eb',
+            canvas: '#f9fafb',
+            ink: '#111827',
+            muted: '#6b7280'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .btn { @apply inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-primary { @apply bg-brand text-white hover:bg-blue-600; }
+    .btn-secondary { @apply border border-line bg-white text-ink hover:bg-canvas; }
+    .btn-danger { @apply bg-bad text-white hover:bg-red-600; }
+    .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-ink transition-all hover:bg-canvas aria-pressed:bg-ink aria-pressed:text-white aria-pressed:border-ink; }
+    .td { @apply p-3 text-sm text-ink; }
+    .nav-page-hidden { display: none !important; }
+  </style>
+</head>
+<body class="bg-canvas text-ink antialiased min-h-screen">
+
+  <!-- Header / Navbar -->
+  <header class="sticky top-0 z-10 border-b border-line bg-white/80 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-center justify-between p-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand font-bold text-white">🏠</div>
+        <div>
+          <h1 class="text-lg font-bold leading-none">Room Rent Dashboard</h1>
+          <p class="text-xs text-muted mt-0.5" id="monthLabel"></p>
+        </div>
+      </div>
+      <button id="addBtn" class="btn btn-primary">+ Add Room / Tenant</button>
+    </div>
+    <!-- Nav Tabs -->
+    <nav class="flex border-t border-line px-4 gap-2 overflow-x-auto">
+      <button data-nav="dashboard" class="border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink [&.active]:border-brand [&.active]:text-brand active">Dashboard</button>
+      <button data-nav="rooms" class="border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink [&.active]:border-brand [&.active]:text-brand">Rooms Cards</button>
+      <button data-nav="tenants" class="border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink [&.active]:border-brand [&.active]:text-brand">Tenants Table</button>
+      <button data-nav="records" class="border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink [&.active]:border-brand [&.active]:text-brand whitespace-nowrap">Tenant Records <span id="recCount" class="ml-1 rounded-full bg-canvas px-1.5 py-0.5 text-[10px] text-muted">0</span></button>
+      <button data-nav="history" class="border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink [&.active]:border-brand [&.active]:text-brand">Payment History</button>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-7xl space-y-6 p-4">
+
+    <!-- Dashboard Section -->
+    <section id="dashboardSection" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-line bg-white p-4">
+        <p class="text-xs font-semibold text-muted uppercase tracking-wider">Total Rooms</p>
+        <p class="mt-2 text-3xl font-bold" id="statTotal">0</p>
+        <p class="mt-1 text-xs text-muted"><span id="statOccupied">0</span> occupied • <span id="statVacant">0</span> vacant</p>
+      </div>
+      <div class="rounded-xl border border-line bg-white p-4">
+        <p class="text-xs font-semibold text-muted uppercase tracking-wider">Collected Rent</p>
+        <p class="mt-2 text-3xl font-bold text-ok" id="statCollected">₹0</p>
+        <p class="mt-1 text-xs text-muted" id="statExpected">of ₹0 expected</p>
+      </div>
+      <div class="rounded-xl border border-line bg-white p-4">
+        <p class="text-xs font-semibold text-muted uppercase tracking-wider">Collection Progress</p>
+        <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-line" id="statBarWrap" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div id="statBar" class="h-full bg-ok transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <p class="mt-2 text-xs text-muted" id="statPending">No tenants yet</p>
+      </div>
+      <div class="rounded-xl border border-line bg-white p-4 flex flex-col justify-between">
+        <p class="text-xs font-semibold text-muted uppercase tracking-wider">Actions</p>
+        <button id="resetBtn" class="btn btn-danger w-full text-xs mt-2">Clear All Rooms</button>
+      </div>
+    </section>
+
+    <!-- Controls (Search & Chips) -->
+    <section id="roomsSection" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="relative flex-1 sm:max-w-xs">
+        <input type="text" id="search" placeholder="Search room or tenant..." class="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand">
+      </div>
+      <div id="chips" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <!-- Rooms Cards Grid -->
+    <section id="roomsGridSection">
+      <div id="gridEmpty" class="hidden rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted"></div>
+      <div id="roomGrid" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- Table View Section -->
+    <section id="tenantsSection" class="overflow-hidden rounded-xl border border-line bg-white">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="border-b border-line bg-canvas text-xs font-semibold uppercase text-muted">
+            <tr>
+              <th class="p-3">Room</th>
+              <th class="p-3">Tenant</th>
+              <th class="p-3">Phone</th>
+              <th class="p-3">C/o Details</th>
+              <th class="p-3">Aadhaar</th>
+              <th class="p-3">Rent</th>
+              <th class="p-3">Deposit</th>
+              <th class="p-3">Move-In</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+        <div id="tableEmpty" class="hidden p-8 text-center text-sm text-muted"></div>
+      </div>
+    </section>
+
+    <!-- Tenant Records Section (saved until you delete them) -->
+    <section id="recordsSection" class="space-y-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <input type="text" id="recSearch" placeholder="Search name, phone or room..." class="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand sm:max-w-xs">
+        <div id="recChips" class="flex flex-wrap gap-2"></div>
+      </div>
+      <p class="text-xs text-muted">Every tenant's details are saved here. When a tenant leaves, the record stays until you delete it.</p>
+      <div id="recEmpty" class="hidden rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted"></div>
+      <div id="recGrid" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- Recent Payments History Section -->
+    <section id="paymentsSection" class="rounded-xl border border-line bg-white p-4 space-y-3">
+      <h2 class="font-bold text-base">Recent Rent Payments</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead class="border-b border-line bg-canvas text-xs font-semibold uppercase text-muted">
+            <tr>
+              <th class="p-3">Date</th>
+              <th class="p-3">Room</th>
+              <th class="p-3">Tenant</th>
+              <th class="p-3">Amount</th>
+              <th class="p-3">Method</th>
+              <th class="p-3">Note</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+        <div id="historyEmpty" class="hidden p-6 text-center text-sm text-muted">No payment records found.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Dialogs & Modals -->
+
+  <!-- Add/Edit Room Modal -->
+  <dialog id="roomDialog" class="rounded-xl border border-line bg-white p-6 shadow-xl backdrop:bg-black/50 max-w-md w-full">
+    <h2 id="formTitle" class="text-lg font-bold">Add New Room</h2>
+    <div id="formError" class="mt-2 hidden rounded-lg bg-badbg p-2 text-xs font-semibold text-bad"></div>
+    <form id="roomForm" class="mt-4 space-y-3">
+      <input type="hidden" name="roomId">
+      <div>
+        <label class="text-xs font-semibold text-muted">Room Number*</label>
+        <input type="text" name="room" required class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">Tenant Name</label>
+        <input type="text" name="tenant" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold text-muted">Phone Number</label>
+          <input type="tel" name="phone" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">Move-in Date</label>
+          <input type="date" name="joinDate" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold text-muted">C/o Name</label>
+          <input type="text" name="careOfName" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">C/o Phone</label>
+          <input type="tel" name="careOfPhone" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold text-muted">Monthly Rent (₹)*</label>
+          <input type="number" name="rent" required class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted">Deposit (₹)</label>
+          <input type="number" name="deposit" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">ID Proof Photos (2)</label>
+        <div class="mt-1 grid grid-cols-2 gap-2">
+          <div class="rounded-lg border border-dashed border-line p-2">
+            <p class="text-[11px] font-semibold text-muted">Photo 1 (Front)</p>
+            <input type="file" id="fAadharPic" accept="image/*" class="mt-1 w-full text-[11px] text-muted">
+            <div id="aadharPreview" class="mt-2 hidden">
+              <img id="aadharImg" src="" class="h-20 w-auto rounded border border-line object-cover">
+              <button type="button" data-clear="1" class="mt-1 text-[11px] font-semibold text-bad underline">Remove</button>
+            </div>
+          </div>
+          <div class="rounded-lg border border-dashed border-line p-2">
+            <p class="text-[11px] font-semibold text-muted">Photo 2 (Back)</p>
+            <input type="file" id="fAadharPic2" accept="image/*" class="mt-1 w-full text-[11px] text-muted">
+            <div id="aadharPreview2" class="mt-2 hidden">
+              <img id="aadharImg2" src="" class="h-20 w-auto rounded border border-line object-cover">
+              <button type="button" data-clear="2" class="mt-1 text-[11px] font-semibold text-bad underline">Remove</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">Current Month Rent</label>
+        <select name="payment" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+          <option value="pending">Pending</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" id="cancelBtn" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Room</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Record Payment Modal -->
+  <dialog id="paymentDialog" class="rounded-xl border border-line bg-white p-6 shadow-xl backdrop:bg-black/50 max-w-md w-full">
+    <h2 class="text-lg font-bold">Record Payment</h2>
+    <p id="paymentSubtitle" class="text-xs text-muted mt-1"></p>
+    <div id="paymentError" class="mt-2 hidden rounded-lg bg-badbg p-2 text-xs font-semibold text-bad"></div>
+    <form id="paymentForm" class="mt-4 space-y-3">
+      <input type="hidden" name="roomId">
+      <div>
+        <label class="text-xs font-semibold text-muted">Amount Received (₹)*</label>
+        <input type="number" name="amount" required class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">Date*</label>
+        <input type="date" name="date" required class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">Payment Method</label>
+        <select name="method" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+          <option value="UPI / Online">UPI / Online</option>
+          <option value="Cash">Cash</option>
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-muted">Note / Remarks</label>
+        <input type="text" name="note" placeholder="Optional" class="mt-1 w-full rounded-lg border border-line p-2 text-sm outline-none focus:border-brand">
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button type="button" id="cancelPayment" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Payment</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- View Image Modal -->
+  <dialog id="imageModal" class="rounded-xl border border-line bg-white p-4 shadow-xl backdrop:bg-black/50 max-w-lg w-full">
+    <div class="flex items-center justify-between pb-2 border-b border-line">
+      <h3 class="font-bold text-sm">ID Proof Preview</h3>
+      <button id="closeImgModal" class="text-muted hover:text-ink text-sm">✕</button>
+    </div>
+    <div id="imgModalBody" class="mt-3 max-h-[70vh] space-y-4 overflow-y-auto"></div>
+  </dialog>
+
+  <!-- Confirm Dialog -->
+  <dialog id="confirmDialog" class="rounded-xl border border-line bg-white p-6 shadow-xl backdrop:bg-black/50 max-w-sm w-full">
+    <h3 id="confirmTitle" class="font-bold text-base">Are you sure?</h3>
+    <p id="confirmMessage" class="mt-2 text-sm text-muted"></p>
+    <div class="mt-6 flex justify-end gap-2">
+      <button id="confirmCancel" class="btn btn-secondary">Cancel</button>
+      <button id="confirmOk" class="btn btn-danger">Confirm</button>
+    </div>
+  </dialog>
+
+  <!-- Payment Receipt Dialog -->
+  <dialog id="receiptDialog" class="rounded-xl border border-line bg-white p-4 shadow-xl backdrop:bg-black/50 max-w-sm w-full">
+    <h3 class="font-bold text-base">Payment Receipt</h3>
+    <div id="receiptContent" class="mt-3 flex min-h-[120px] items-center justify-center rounded-lg bg-canvas p-2 text-sm text-muted">Card ban raha hai...</div>
+    <div class="mt-4 flex justify-between gap-2">
+      <button id="closeReceipt" class="btn btn-secondary">Close</button>
+      <button id="sendReceiptWhatsApp" class="btn btn-primary">📤 Send Receipt Card</button>
+    </div>
+  </dialog>
+
+  <!-- Full History Dialog -->
+  <dialog id="historyDialog" class="rounded-xl border border-line bg-white p-6 shadow-xl backdrop:bg-black/50 max-w-2xl w-full">
+    <div class="flex items-center justify-between border-b border-line pb-3">
+      <h3 class="font-bold text-base">Payment Records</h3>
+      <button id="closeHistory" class="text-muted hover:text-ink">✕</button>
+    </div>
+    <div class="mt-4 max-h-[60vh] overflow-y-auto">
+      <table class="w-full text-left">
+        <thead class="border-b border-line bg-canvas text-xs font-semibold uppercase text-muted">
+          <tr>
+            <th class="p-3">Date</th>
+            <th class="p-3">Room</th>
+            <th class="p-3">Tenant</th>
+            <th class="p-3">Amount</th>
+            <th class="p-3">Method</th>
+            <th class="p-3">Note</th>
+          </tr>
+        </thead>
+        <tbody id="fullHistoryBody"></tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex justify-end">
+      <button id="closeHistory2" class="btn btn-secondary">Close</button>
+    </div>
+  </dialog>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-4 right-4 z-50 rounded-lg bg-ink px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-all duration-300 opacity-0 translate-y-2 pointer-events-none"></div>
+
+  <!-- Firebase Modular SDK Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { 
+      getFirestore, 
+      collection, 
+      onSnapshot, 
+      doc, 
+      setDoc, 
+      updateDoc, 
+      deleteDoc,
+      getDocs 
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+    import { 
+      getAuth, 
+      signInAnonymously, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyABS1_edCZrcyy2xgJQIuCxnoD4Hi4s7OI",
+      authDomain: "room-rent-85a2d.firebaseapp.com",
+      projectId: "room-rent-85a2d",
+      storageBucket: "room-rent-85a2d.firebasestorage.app",
+      messagingSenderId: "738393580914",
+      appId: "1:738393580914:web:40f30d26ceb57e9f55e9eb"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const roomsRef = collection(db, "rooms");
+    const tenantsRef = collection(db, "tenants");
+
+    signInAnonymously(auth).catch((error) => {
+      console.error("Anonymous auth error:", error);
+    });
+
+    let rooms = [];
+    let tenantRecords = [];
+    let recFilter = 'all';
+    let recQuery = '';
+    let filter = 'all';
+    let query = '';
+    let toastTimer;
+    let currentAadharBase64 = '';
+    let currentAadharBase64_2 = '';
+
+    /* ---------- Helper Functions ---------- */
+    const $ = s => document.querySelector(s);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+    const pad = n => String(n).padStart(2, '0');
+    const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const parseISO = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+    const monthKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    const fmtDate = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+    const isOccupied = r => r.tenant && r.tenant.trim() !== '';
+    const isPaid = r => isOccupied(r) && (r.paidMonth === monthKey(new Date()) || currentMonthPaid(r) >= Number(r.rent));
+
+    function dueInfo(r) {
+      if (!isOccupied(r) || !r.joinDate) return null;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const day = parseISO(r.joinDate).getDate();
+      const paid = isPaid(r);
+      const base = new Date(today.getFullYear(), today.getMonth() + (paid ? 1 : 0), 1);
+      const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+      const due = new Date(base.getFullYear(), base.getMonth(), Math.min(day, lastDay));
+      const overdue = !paid && due < today;
+      const daysLate = overdue ? Math.round((today - due) / 864e5) : 0;
+      return { due, paid, overdue, daysLate };
+    }
+
+    function paymentRows(r) {
+      return Array.isArray(r.payments) ? r.payments : [];
+    }
+
+    function currentMonthPaid(r) {
+      const cur = monthKey(new Date());
+      return paymentRows(r)
+        .filter(p => String(p.date || '').slice(0, 7) === cur)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    }
+
+    function outstandingRent(r) {
+      return Math.max(0, Number(r.rent || 0) - currentMonthPaid(r));
+    }
+
+    function allPayments() {
+      const rows = [];
+      rooms.forEach(r => paymentRows(r).forEach(p => rows.push({ ...p, room: r.room, tenant: r.tenant })));
+      tenantRecords.filter(t => t.status === 'left').forEach(t =>
+        (Array.isArray(t.payments) ? t.payments : []).forEach(p => rows.push({ ...p, room: t.room, tenant: t.name })));
+      return rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    }
+
+    function paymentTableHTML(rows) {
+      return rows.map(p => `
+        <tr class="border-t border-line">
+          <td class="td whitespace-nowrap">${p.date ? fmtDate(parseISO(p.date)) : '—'}</td>
+          <td class="td font-semibold">${esc(p.room)}</td>
+          <td class="td">${esc(p.tenant)}</td>
+          <td class="td font-semibold tabular-nums">${inr(p.amount)}</td>
+          <td class="td">${esc(p.method || '—')}</td>
+          <td class="td">${esc(p.note || '—')}</td>
+        </tr>`).join('');
+    }
+
+    function renderHistory() {
+      const rows = allPayments();
+      $('#historyBody').innerHTML = paymentTableHTML(rows.slice(0, 8));
+      $('#historyEmpty').classList.toggle('hidden', rows.length > 0);
+      $('#historyBody').classList.toggle('hidden', rows.length === 0);
+      if ($('#fullHistoryBody')) $('#fullHistoryBody').innerHTML = paymentTableHTML(rows);
+    }
+
+    function waPhone(r) {
+      const phone = String(r.phone || '').replace(/\D/g, '');
+      return phone.length === 10 ? '91' + phone : phone;
+    }
+
+    function openWhatsApp(r, message) {
+      if (!isOccupied(r) || !r.phone) return;
+      const phone = waPhone(r);
+      if (!phone) return;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+    }
+
+    function whatsappDue(r) {
+      if (!isOccupied(r) || !r.phone) return;
+      const i = dueInfo(r);
+      const due = outstandingRent(r);
+      const days = i && i.overdue ? i.daysLate : 0;
+      let message;
+      if (due > 0 && days > 0) {
+        message = `Hello ${r.tenant}, aapka rent ${days} days se due hai. Pending rent ${inr(due)} hai. Kindly apna rent de dein.`;
+      } else if (due > 0) {
+        message = `Hello ${r.tenant}, aapka rent ${inr(due)} pending hai. Kindly apna rent de dein.`;
+      } else {
+        message = `Hello ${r.tenant}, aapka rent paid/settled hai.`;
+      }
+      openWhatsApp(r, message);
+    }
+
+    function lastPaymentFor(r) {
+      return paymentRows(r)
+        .slice()
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0] || null;
+    }
+
+    /* ---------- UI Components ---------- */
+    const badge = (cls, html) =>
+      `<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}">${html}</span>`;
+
+    const statusBadge = r => isOccupied(r)
+      ? badge('bg-okbg text-ok', '<span class="h-1.5 w-1.5 rounded-full bg-ok"></span>Occupied')
+      : badge('bg-badbg text-bad', '<span class="h-1.5 w-1.5 rounded-full bg-bad"></span>Vacant');
+
+    function payBadge(r) {
+      const i = dueInfo(r);
+      if (!i) return '';
+      if (i.paid) return badge('bg-okbg text-ok', 'Rent paid');
+      if (i.overdue) return badge('bg-warnbg text-warn', `${i.daysLate} day${i.daysLate > 1 ? 's' : ''} overdue`);
+      return badge('bg-warnbg text-warn', 'Rent pending');
+    }
+
+    const proofCount = x => (x.aadharPic ? 1 : 0) + (x.aadharPic2 ? 1 : 0);
+
+    function cardHTML(r) {
+      const occ = isOccupied(r);
+      const i = dueInfo(r);
+      const paid = i && i.paid;
+      const phone = occ && r.phone
+        ? `<a href="tel:${esc(r.phone.replace(/\s/g, ''))}" class="text-sm text-muted hover:text-ink">${esc(r.phone)}</a>` : '';
+      const primary = occ
+        ? `<button class="btn btn-primary col-span-2" data-action="paid" data-id="${r.id}" ${paid ? 'disabled' : ''}>${paid ? 'Rent paid this month' : 'Mark rent paid'}</button>`
+        : `<button class="btn btn-primary col-span-2" data-action="edit" data-id="${r.id}">Add tenant</button>`;
+
+      const aadharBtn = occ && (r.aadharPic || r.aadharPic2)
+        ? `<div class="col-span-2">
+            <button class="btn btn-secondary w-full text-xs" data-action="view-img" data-id="${r.id}">👁️ View ID Proof (${proofCount(r)})</button>
+           </div>`
+        : '';
+
+      return `
+      <article class="flex flex-col gap-3 rounded-[14px] border border-l-[6px] border-line ${occ ? 'border-l-ok' : 'border-l-bad'} bg-white p-4">
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="font-display text-2xl font-bold leading-none">Room ${esc(r.room)}</h3>
+          ${statusBadge(r)}
+        </div>
+        <div>
+          <p class="font-semibold ${occ ? '' : 'text-muted'}">${occ ? esc(r.tenant) : 'No tenant'}</p>
+          ${phone}
+          ${occ && r.careOfName ? `<p class="text-xs text-muted mt-1">C/o: ${esc(r.careOfName)} (${esc(r.careOfPhone || 'N/A')})</p>` : ''}
+        </div>
+        <dl class="grid grid-cols-2 gap-2 text-sm">
+          <div><dt class="text-muted">Monthly rent</dt><dd class="font-semibold tabular-nums">${inr(r.rent)}</dd></div>
+          <div><dt class="text-muted">Rent due date</dt><dd class="font-semibold">${i ? fmtDate(i.due) : '—'}</dd></div>
+        </dl>
+        ${i ? `<div class="flex flex-wrap items-center gap-2">${payBadge(r)}${currentMonthPaid(r) ? `<span class="text-xs font-semibold text-muted">Paid this month: ${inr(currentMonthPaid(r))}</span>` : ''}</div>` : ''}
+        ${aadharBtn}
+        <div class="mt-auto grid grid-cols-2 gap-2 pt-1">
+          ${primary}
+          <button class="btn btn-secondary" data-action="payment" data-id="${r.id}" ${occ ? '' : 'disabled'}>Record payment</button>
+          <button class="btn btn-secondary" data-action="receipt" data-id="${r.id}" ${occ && r.phone && lastPaymentFor(r) ? '' : 'disabled'}>Send receipt</button>
+          <button class="btn btn-secondary" data-action="history" data-id="${r.id}" ${occ ? '' : 'disabled'}>Payment history</button>
+          <button class="btn btn-secondary" data-action="whatsapp" data-id="${r.id}" ${occ && r.phone ? '' : 'disabled'}>WhatsApp due</button>
+          <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Edit details</button>
+          <button class="btn btn-danger" data-action="vacate" data-id="${r.id}" ${occ ? '' : 'disabled'}>Vacate room</button>
+        </div>
+      </article>`;
+    }
+
+    function rowHTML(r) {
+      const occ = isOccupied(r);
+      const dash = '<span class="text-muted">—</span>';
+      const coDetails = occ && (r.careOfName || r.careOfPhone)
+        ? `${esc(r.careOfName || 'N/A')}<br><span class="text-xs text-muted">${esc(r.careOfPhone || '')}</span>`
+        : dash;
+      
+      const aadharProof = occ && (r.aadharPic || r.aadharPic2)
+        ? `<button class="text-xs font-semibold text-brand underline" data-action="view-img" data-id="${r.id}">View (${proofCount(r)})</button>`
+        : dash;
+
+      return `
+      <tr class="border-t border-line">
+        <td class="td font-semibold">${esc(r.room)}</td>
+        <td class="td">${occ ? esc(r.tenant) : dash}</td>
+        <td class="td whitespace-nowrap">${occ && r.phone ? `<a href="tel:${esc(r.phone.replace(/\s/g, ''))}" class="hover:underline">${esc(r.phone)}</a>` : dash}</td>
+        <td class="td">${coDetails}</td>
+        <td class="td">${aadharProof}</td>
+        <td class="td tabular-nums">${inr(r.rent)}</td>
+        <td class="td tabular-nums">${occ ? inr(r.deposit) : dash}</td>
+        <td class="td whitespace-nowrap">${occ && r.joinDate ? fmtDate(parseISO(r.joinDate)) : dash}</td>
+        <td class="td"><div class="flex flex-col items-start gap-1">${statusBadge(r)}${payBadge(r)}</div></td>
+        <td class="td">
+          <div class="flex flex-wrap gap-x-3 gap-y-1 whitespace-nowrap font-semibold">
+            <button class="text-brand hover:underline" data-action="edit" data-id="${r.id}">Edit</button>
+            ${occ && !isPaid(r) ? `<button class="text-ok hover:underline" data-action="paid" data-id="${r.id}">Mark paid</button>` : ''}
+            ${occ ? `<button class="text-brand hover:underline" data-action="payment" data-id="${r.id}">Add payment</button>` : ''}
+            ${occ ? `<button class="text-brand hover:underline" data-action="history" data-id="${r.id}">History</button>` : ''}
+            ${occ && r.phone && lastPaymentFor(r) ? `<button class="text-brand hover:underline" data-action="receipt" data-id="${r.id}">Receipt</button>` : ''}
+            ${occ && r.phone ? `<button class="text-brand hover:underline" data-action="whatsapp" data-id="${r.id}">WhatsApp</button>` : ''}
+            <button class="text-bad hover:underline" data-action="delete" data-id="${r.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    /* ---------- Tenant Records (kept until you delete them) ---------- */
+    const tenantFields = r => ({
+      name: r.tenant, phone: r.phone || '', careOfName: r.careOfName || '', careOfPhone: r.careOfPhone || '',
+      aadharPic: r.aadharPic || '', aadharPic2: r.aadharPic2 || '', rent: Number(r.rent || 0), deposit: Number(r.deposit || 0),
+      joinDate: r.joinDate || '', room: r.room, roomId: r.id
+    });
+
+    // Copies the tenant into the "tenants" collection as "left" (throws if it fails, so nothing gets wiped)
+    async function archiveTenant(r) {
+      const tid = r.tenantId || ('mig_' + r.id);
+      await setDoc(doc(db, "tenants", tid), {
+        ...tenantFields(r),
+        status: 'left',
+        leftDate: iso(new Date()),
+        payments: paymentRows(r)
+      }, { merge: true });
+      return tid;
+    }
+
+    // Existing tenants (added before this feature) get a record automatically
+    const migrating = new Set();
+    async function migrateLegacyTenants() {
+      for (const r of rooms) {
+        if (!isOccupied(r) || r.tenantId || migrating.has(r.id)) continue;
+        migrating.add(r.id);
+        try {
+          const tid = 'mig_' + r.id;
+          await setDoc(doc(db, "tenants", tid), { ...tenantFields(r), status: 'active', createdAt: Date.now() }, { merge: true });
+          await updateDoc(doc(db, "rooms", r.id), { tenantId: tid });
+        } catch (err) {
+          console.error("Tenant record migration failed:", err);
+          toast('Tenant Records: could not save. Check Firestore rules for "tenants".');
+        }
+      }
+    }
+
+    function tenantPayments(t) {
+      if (t.status !== 'left') {
+        const r = rooms.find(x => x.id === t.roomId);
+        if (r) return paymentRows(r);
+      }
+      return Array.isArray(t.payments) ? t.payments : [];
+    }
+
+    function recMatches(t) {
+      const q = recQuery.trim().toLowerCase();
+      if (!q) return true;
+      return [t.name, t.phone, t.room, t.careOfName].some(v => String(v || '').toLowerCase().includes(q));
+    }
+
+    function recCardHTML(t) {
+      const active = t.status !== 'left';
+      const dash = '<span class="text-muted">—</span>';
+      const total = tenantPayments(t).reduce((s, p) => s + Number(p.amount || 0), 0);
+      const status = active
+        ? badge('bg-okbg text-ok', '<span class="h-1.5 w-1.5 rounded-full bg-ok"></span>Current')
+        : badge('bg-canvas text-muted border border-line', 'Left');
+      const aadhar = (t.aadharPic || t.aadharPic2)
+        ? `<button class="btn btn-secondary w-full text-xs" data-action="rec-view-img" data-id="${t.id}">👁️ View ID Proof (${proofCount(t)})</button>`
+        : '';
+      const item = (label, val) => `<div><dt class="text-muted">${label}</dt><dd class="font-semibold">${val}</dd></div>`;
+      return `
+      <article class="flex flex-col gap-3 rounded-[14px] border border-l-[6px] border-line ${active ? 'border-l-ok' : 'border-l-muted'} bg-white p-4">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <h3 class="truncate text-lg font-bold leading-tight">${esc(t.name)}</h3>
+            <p class="text-xs text-muted mt-0.5">Room ${esc(t.room)}</p>
+          </div>
+          ${status}
+        </div>
+        <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+          ${item('Phone', t.phone ? `<a href="tel:${esc(String(t.phone).replace(/\s/g, ''))}" class="hover:underline">${esc(t.phone)}</a>` : dash)}
+          ${item('C/o name', t.careOfName ? esc(t.careOfName) : dash)}
+          ${item('C/o phone', t.careOfPhone ? `<a href="tel:${esc(String(t.careOfPhone).replace(/\s/g, ''))}" class="hover:underline">${esc(t.careOfPhone)}</a>` : dash)}
+          ${item('Monthly rent', `<span class="tabular-nums">${inr(t.rent)}</span>`)}
+          ${item('Deposit', `<span class="tabular-nums">${inr(t.deposit)}</span>`)}
+          ${item('Total paid', `<span class="tabular-nums">${inr(total)}</span>`)}
+          ${item('Move-in', t.joinDate ? fmtDate(parseISO(t.joinDate)) : dash)}
+          ${item('Move-out', !active && t.leftDate ? fmtDate(parseISO(t.leftDate)) : dash)}
+        </dl>
+        ${aadhar}
+        <div class="mt-auto grid grid-cols-2 gap-2 pt-1">
+          <button class="btn btn-secondary ${active ? 'col-span-2' : ''}" data-action="rec-history" data-id="${t.id}">Payment history</button>
+          ${active ? '' : `<button class="btn btn-danger" data-action="rec-delete" data-id="${t.id}">Delete record</button>`}
+        </div>
+      </article>`;
+    }
+
+    function renderRecords() {
+      const pool = tenantRecords.filter(recMatches);
+      const counts = {
+        all: pool.length,
+        active: pool.filter(t => t.status !== 'left').length,
+        left: pool.filter(t => t.status === 'left').length
+      };
+      $('#recCount').textContent = tenantRecords.length;
+      $('#recChips').innerHTML = [['all', 'All'], ['active', 'Current'], ['left', 'Left']].map(([key, label]) =>
+        `<button class="chip" data-recfilter="${key}" aria-pressed="${recFilter === key}">${label}<span class="opacity-70">${counts[key]}</span></button>`
+      ).join('');
+
+      const list = pool
+        .filter(t => recFilter === 'all' || (recFilter === 'active' ? t.status !== 'left' : t.status === 'left'))
+        .sort((a, b) => {
+          const aa = a.status !== 'left', bb = b.status !== 'left';
+          if (aa !== bb) return aa ? -1 : 1;
+          return String(b.leftDate || b.joinDate || '').localeCompare(String(a.leftDate || a.joinDate || ''));
+        });
+
+      $('#recGrid').innerHTML = list.map(recCardHTML).join('');
+      const empty = list.length === 0;
+      $('#recEmpty').textContent = tenantRecords.length === 0
+        ? 'No tenant records yet. Add a tenant to a room and their details will appear here.'
+        : 'No records match your search or filter.';
+      $('#recEmpty').classList.toggle('hidden', !empty);
+      $('#recGrid').classList.toggle('hidden', empty);
+    }
+
+    /* ---------- Image Modal Handling ---------- */
+    // pics = array of image data (proof photo 1, proof photo 2)
+    function openImageModal(pics, tenantName) {
+      const list = (Array.isArray(pics) ? pics : [pics]).filter(Boolean);
+      const labels = ['Front', 'Back'];
+      $('#imgModalBody').innerHTML = list.map((src, i) => `
+        <div>
+          <p class="mb-1 text-xs font-semibold text-muted">Photo ${i + 1} (${labels[i] || ''})</p>
+          <img src="${esc(src)}" class="max-h-[55vh] w-full rounded border border-line object-contain">
+          <div class="mt-2 flex justify-end">
+            <a href="${esc(src)}" download="Proof_${esc(tenantName || 'Tenant')}_${i + 1}.jpg" class="btn btn-primary text-xs">Download Photo ${i + 1}</a>
+          </div>
+        </div>`).join('');
+      $('#imageModal').showModal();
+    }
+
+    $('#closeImgModal').addEventListener('click', () => $('#imageModal').close());
+
+    /* ---------- Rendering Views ---------- */
+    function matchesSearch(r) {
+      const q = query.trim().toLowerCase();
+      return !q || (r.tenant && r.tenant.toLowerCase().includes(q)) || (r.room && r.room.toLowerCase().includes(q));
+    }
+
+    function matchesFilter(r) {
+      if (filter === 'occupied') return isOccupied(r);
+      if (filter === 'vacant') return !isOccupied(r);
+      if (filter === 'pending') return isOccupied(r) && !isPaid(r);
+      return true;
+    }
+
+    function renderSummary() {
+      const occ = rooms.filter(isOccupied);
+      const expected = occ.reduce((s, r) => s + Number(r.rent || 0), 0);
+      const collected = occ.reduce((s, r) => s + Math.min(currentMonthPaid(r), Number(r.rent || 0)), 0);
+      const pending = occ.filter(r => currentMonthPaid(r) < Number(r.rent || 0)).length;
+      const pct = expected ? Math.round((collected / expected) * 100) : 0;
+
+      $('#statTotal').textContent = rooms.length;
+      $('#statOccupied').textContent = occ.length;
+      $('#statVacant').textContent = rooms.length - occ.length;
+      $('#statCollected').textContent = inr(collected);
+      $('#statExpected').textContent = `of ${inr(expected)} expected`;
+      $('#statBar').style.width = pct + '%';
+      $('#statBarWrap').setAttribute('aria-valuenow', pct);
+      $('#statPending').textContent = pending === 0
+        ? (occ.length ? 'All rent collected' : 'No tenants yet')
+        : `${pending} tenant${pending > 1 ? 's' : ''} yet to pay`;
+    }
+
+    function renderChips() {
+      const pool = rooms.filter(matchesSearch);
+      const counts = {
+        all: pool.length,
+        occupied: pool.filter(isOccupied).length,
+        vacant: pool.filter(r => !isOccupied(r)).length,
+        pending: pool.filter(r => isOccupied(r) && !isPaid(r)).length
+      };
+      const defs = [['all', 'All'], ['occupied', 'Occupied'], ['vacant', 'Vacant'], ['pending', 'Pending payment']];
+      $('#chips').innerHTML = defs.map(([key, label]) =>
+        `<button class="chip" data-filter="${key}" aria-pressed="${filter === key}">${label}<span class="opacity-70">${counts[key]}</span></button>`
+      ).join('');
+    }
+
+    function render() {
+      rooms.forEach(r => { if (!Array.isArray(r.payments)) r.payments = []; });
+      rooms.sort((a, b) => String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
+      const list = rooms.filter(r => matchesSearch(r) && matchesFilter(r));
+
+      renderSummary();
+      renderChips();
+      renderHistory();
+      renderRecords();
+
+      $('#roomGrid').innerHTML = list.map(cardHTML).join('');
+      $('#tableBody').innerHTML = list.map(rowHTML).join('');
+
+      const empty = list.length === 0;
+      const msg = rooms.length === 0
+        ? 'No rooms yet. Use "+ Add Room / Tenant" to add your first room.'
+        : 'No rooms match your search or filter.';
+      ['#gridEmpty', '#tableEmpty'].forEach(sel => {
+        $(sel).textContent = msg;
+        $(sel).classList.toggle('hidden', !empty);
+      });
+      $('#roomGrid').classList.toggle('hidden', empty);
+    }
+
+    function toast(text) {
+      const t = $('#toast');
+      t.textContent = text;
+      t.classList.remove('opacity-0', 'translate-y-2');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.add('opacity-0', 'translate-y-2'), 2400);
+    }
+
+    /* ---------- Form & Modals ---------- */
+    const dlg = $('#roomDialog');
+    const form = $('#roomForm');
+
+    // Compress a chosen photo (max 800px, JPEG) and hand back a small data URL
+    function compressImage(file, cb) {
+      const reader = new FileReader();
+      reader.onload = evt => {
+        const img = new Image();
+        img.onload = () => {
+          const max = 800;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > max) { h *= max / w; w = max; } }
+          else { if (h > max) { w *= max / h; h = max; } }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          cb(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setProofPreview(n, data) {
+      const sfx = n === 1 ? '' : '2';
+      if (data) {
+        $('#aadharImg' + sfx).src = data;
+        $('#aadharPreview' + sfx).classList.remove('hidden');
+      } else {
+        $('#aadharImg' + sfx).removeAttribute('src');
+        $('#aadharPreview' + sfx).classList.add('hidden');
+      }
+    }
+
+    $('#fAadharPic').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) compressImage(file, d => { currentAadharBase64 = d; setProofPreview(1, d); });
+    });
+    $('#fAadharPic2').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) compressImage(file, d => { currentAadharBase64_2 = d; setProofPreview(2, d); });
+    });
+    $('#roomForm').addEventListener('click', e => {
+      const b = e.target.closest('[data-clear]');
+      if (!b) return;
+      if (b.dataset.clear === '1') { currentAadharBase64 = ''; $('#fAadharPic').value = ''; setProofPreview(1, ''); }
+      else { currentAadharBase64_2 = ''; $('#fAadharPic2').value = ''; setProofPreview(2, ''); }
+    });
+
+    function openForm(id) {
+      const r = id ? rooms.find(x => x.id === id) : null;
+      const f = form.elements;
+      form.reset();
+      currentAadharBase64 = r && r.aadharPic ? r.aadharPic : '';
+      currentAadharBase64_2 = r && r.aadharPic2 ? r.aadharPic2 : '';
+      setProofPreview(1, currentAadharBase64);
+      setProofPreview(2, currentAadharBase64_2);
+
+      $('#formError').classList.add('hidden');
+      $('#formTitle').textContent = r ? `Edit Room ${r.room}` : 'Add new room / tenant';
+
+      f.roomId.value = r ? r.id : '';
+      f.room.value = r ? r.room : '';
+      f.tenant.value = r ? r.tenant : '';
+      f.phone.value = r ? r.phone : '';
+      f.careOfName.value = r && r.careOfName ? r.careOfName : '';
+      f.careOfPhone.value = r && r.careOfPhone ? r.careOfPhone : '';
+      f.rent.value = r ? r.rent : '';
+      f.deposit.value = r && r.deposit ? r.deposit : '';
+      f.joinDate.value = (r && r.joinDate) || iso(new Date());
+      f.payment.value = r && isPaid(r) ? 'paid' : 'pending';
+
+      dlg.showModal();
+      f.room.focus();
+    }
+
+    function closeForm() { dlg.close(); }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const f = form.elements;
+      const room = f.room.value.trim();
+      const tenant = f.tenant.value.trim();
+      const rent = Number(f.rent.value);
+      const deposit = Number(f.deposit.value || 0);
+      const editingId = f.roomId.value;
+
+      let err = '';
+      if (!room) err = 'Enter a room number.';
+      else if (rooms.some(x => x.id !== editingId && String(x.room).toLowerCase() === room.toLowerCase())) err = `Room ${room} already exists. Use a different room number.`;
+      else if (!(rent > 0)) err = 'Enter a monthly rent greater than ₹0.';
+      else if (deposit < 0) err = 'Security deposit cannot be negative.';
+      else if (tenant && !f.joinDate.value) err = 'Enter the tenant\'s move-in date.';
+
+      if (err) {
+        const box = $('#formError');
+        box.textContent = err;
+        box.classList.remove('hidden');
+        return;
+      }
+
+      const data = tenant
+        ? { room, tenant, phone: f.phone.value.trim(), 
+            careOfName: f.careOfName.value.trim(),
+            careOfPhone: f.careOfPhone.value.trim(),
+            aadharPic: currentAadharBase64,
+            aadharPic2: currentAadharBase64_2,
+            rent, deposit, joinDate: f.joinDate.value,
+            paidMonth: f.payment.value === 'paid' ? monthKey(new Date()) : null }
+        : { room, tenant: '', phone: '', careOfName: '', careOfPhone: '', aadharPic: '', aadharPic2: '', rent, deposit: 0, joinDate: '', paidMonth: null, tenantId: null };
+
+      try {
+        const prev = editingId ? rooms.find(x => x.id === editingId) : null;
+        const prevOcc = !!prev && isOccupied(prev);
+        const roomId = editingId || uid();
+
+        if (tenant) {
+          // Save / update this tenant's permanent record first
+          const tid = prevOcc ? (prev.tenantId || ('mig_' + roomId)) : uid();
+          const rec = { ...tenantFields({ ...data, id: roomId }), status: 'active' };
+          if (!prevOcc || !prev.tenantId) rec.createdAt = Date.now();
+          await setDoc(doc(db, "tenants", tid), rec, { merge: true });
+          data.tenantId = tid;
+        } else if (prevOcc) {
+          // Tenant name cleared: keep their record as "left"
+          await archiveTenant(prev);
+        }
+
+        if (editingId) {
+          const upd = { ...data };
+          if (prevOcc && !tenant) upd.payments = [];
+          await updateDoc(doc(db, "rooms", editingId), upd);
+          toast(`Room ${room} updated`);
+        } else {
+          await setDoc(doc(db, "rooms", roomId), { ...data, payments: [] });
+          toast(`Room ${room} added`);
+        }
+        closeForm();
+      } catch (err) {
+        alert("Error saving to Firebase: " + err.message);
+      }
+    });
+
+    /* ---------- Event Listeners ---------- */
+    $('#addBtn').addEventListener('click', () => openForm());
+    $('#cancelBtn').addEventListener('click', closeForm);
+    dlg.addEventListener('click', e => { if (e.target === dlg) closeForm(); });
+
+    const navPages = {
+      dashboard: ['#dashboardSection', '#roomsSection', '#roomsGridSection'],
+      rooms: ['#roomsSection', '#roomsGridSection'],
+      tenants: ['#tenantsSection'],
+      records: ['#recordsSection'],
+      history: ['#paymentsSection']
+    };
+
+    function showNavPage(key) {
+      const allPages = ['#dashboardSection', '#roomsSection', '#roomsGridSection', '#paymentsSection', '#tenantsSection', '#recordsSection'];
+      allPages.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el) el.classList.add('nav-page-hidden');
+      });
+      (navPages[key] || navPages.dashboard).forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el) el.classList.remove('nav-page-hidden');
+      });
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.nav === key);
+      });
+      if (key === 'history') openHistory();
+    }
+
+    document.querySelectorAll('[data-nav]').forEach(btn => {
+      btn.addEventListener('click', () => showNavPage(btn.dataset.nav));
+    });
+
+    // Default active page set to Dashboard + Rooms Grid
+    showNavPage('dashboard');
+
+    $('#search').addEventListener('input', e => { query = e.target.value; render(); });
+    $('#recSearch').addEventListener('input', e => { recQuery = e.target.value; renderRecords(); });
+
+    const confirmDlg = $('#confirmDialog');
+    let confirmResolve = null;
+
+    function themedConfirm(message, title = 'Are you sure?') {
+      $('#confirmTitle').textContent = title;
+      $('#confirmMessage').textContent = message;
+      confirmDlg.showModal();
+      return new Promise(resolve => { confirmResolve = resolve; });
+    }
+
+    $('#confirmCancel').addEventListener('click', () => {
+      confirmDlg.close();
+      if (confirmResolve) { confirmResolve(false); confirmResolve = null; }
+    });
+    $('#confirmOk').addEventListener('click', () => {
+      confirmDlg.close();
+      if (confirmResolve) { confirmResolve(true); confirmResolve = null; }
+    });
+    confirmDlg.addEventListener('click', e => {
+      if (e.target === confirmDlg) $('#confirmCancel').click();
+    });
+
+    const receiptDlg = $('#receiptDialog');
+    let receiptRoom = null;
+    let receiptPayment = null;
+
+    let receiptBlob = null;
+    let receiptUrl = '';
+
+    // Draws the receipt card on a canvas and returns it as a PNG blob
+    function buildReceiptImage(r, payment) {
+      return new Promise(resolve => {
+        const W = 720, pad = 48;
+        const rows = [
+          ['Tenant', r.tenant],
+          ['Room', r.room],
+          ['Payment date', payment.date ? fmtDate(parseISO(payment.date)) : '—'],
+          ['Payment method', payment.method || '—']
+        ];
+        const font = w => `${w} 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`;
+        const measure = document.createElement('canvas').getContext('2d');
+        measure.font = font('500 26px');
+        const wrap = (text, maxW) => {
+          const words = String(text).split(/\s+/); const lines = []; let cur = '';
+          words.forEach(w => {
+            const t = cur ? cur + ' ' + w : w;
+            if (measure.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+          });
+          if (cur) lines.push(cur);
+          return lines;
+        };
+        const noteLines = payment.note ? wrap('Note: ' + payment.note, W - pad * 2 - 40) : [];
+        const H = 470 + rows.length * 70 + (noteLines.length ? noteLines.length * 36 + 60 : 0) + 110;
+
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const g = c.getContext('2d');
+        g.fillStyle = '#f3f4f6'; g.fillRect(0, 0, W, H);
+        // card
+        g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(20, 20, W - 40, H - 40, 28); g.fill();
+        // header
+        g.save(); g.beginPath(); g.roundRect(20, 20, W - 40, 200, [28, 28, 0, 0]); g.clip();
+        g.fillStyle = '#22c55e'; g.fillRect(20, 20, W - 40, 200); g.restore();
+        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(W / 2, 100, 40, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#22c55e'; g.lineWidth = 9; g.lineCap = 'round'; g.lineJoin = 'round';
+        g.beginPath(); g.moveTo(W / 2 - 18, 100); g.lineTo(W / 2 - 4, 114); g.lineTo(W / 2 + 20, 86); g.stroke();
+        g.fillStyle = '#ffffff'; g.textAlign = 'center';
+        g.font = font('700 34px'); g.fillText('Rent Payment Receipt', W / 2, 187);
+        // amount
+        g.fillStyle = '#6b7280'; g.font = font('500 24px'); g.fillText('Amount received', W / 2, 285);
+        g.fillStyle = '#16a34a'; g.font = font('800 78px'); g.fillText(inr(payment.amount), W / 2, 372);
+        // divider
+        let y = 420;
+        g.strokeStyle = '#e5e7eb'; g.lineWidth = 2; g.setLineDash([10, 8]);
+        g.beginPath(); g.moveTo(pad, y); g.lineTo(W - pad, y); g.stroke(); g.setLineDash([]);
+        y += 30;
+        rows.forEach(([k, v]) => {
+          g.textAlign = 'left'; g.fillStyle = '#6b7280'; g.font = font('500 26px'); g.fillText(k, pad, y + 42);
+          g.textAlign = 'right'; g.fillStyle = '#111827'; g.font = font('700 28px');
+          let val = String(v), maxW = W - pad * 2 - 230;
+          while (g.measureText(val).width > maxW && val.length > 3) val = val.slice(0, -2);
+          if (val !== String(v)) val += '…';
+          g.fillText(val, W - pad, y + 42);
+          y += 70;
+          g.strokeStyle = '#f3f4f6'; g.beginPath(); g.moveTo(pad, y); g.lineTo(W - pad, y); g.stroke();
+        });
+        if (noteLines.length) {
+          y += 22;
+          const bh = noteLines.length * 36 + 28;
+          g.fillStyle = '#f9fafb'; g.beginPath(); g.roundRect(pad, y, W - pad * 2, bh, 14); g.fill();
+          g.textAlign = 'left'; g.fillStyle = '#374151'; g.font = font('500 26px');
+          noteLines.forEach((ln, k) => g.fillText(ln, pad + 20, y + 40 + k * 36));
+          y += bh;
+        }
+        g.textAlign = 'center'; g.fillStyle = '#9ca3af'; g.font = font('500 22px');
+        g.fillText('Thank you! Payment received.', W / 2, H - 62);
+        c.toBlob(b => resolve(b), 'image/png');
+      });
+    }
+
+    async function showReceiptModal(r, payment) {
+      receiptRoom = r;
+      receiptPayment = payment;
+      receiptBlob = null;
+      $('#receiptContent').textContent = 'Card ban raha hai...';
+      $('#sendReceiptWhatsApp').disabled = true;
+      receiptDlg.showModal();
+      try {
+        const blob = await buildReceiptImage(r, payment);
+        if (receiptRoom !== r || receiptPayment !== payment) return;
+        receiptBlob = blob;
+        if (receiptUrl) URL.revokeObjectURL(receiptUrl);
+        receiptUrl = URL.createObjectURL(blob);
+        $('#receiptContent').innerHTML = `<img src="${receiptUrl}" alt="Receipt" class="max-h-[65vh] w-full rounded object-contain">`;
+        $('#sendReceiptWhatsApp').disabled = false;
+      } catch (err) {
+        console.error(err);
+        $('#receiptContent').textContent = 'Receipt card nahi ban paya.';
+      }
+    }
+
+    // Shares the card image (mobile share sheet -> WhatsApp). Falls back to download + opening the chat.
+    async function sendReceiptCard() {
+      if (!receiptRoom || !receiptPayment || !receiptBlob) return;
+      const r = receiptRoom;
+      const fname = `Receipt_Room${String(r.room).replace(/[^\w-]/g, '')}_${receiptPayment.date || 'payment'}.png`;
+      const file = new File([receiptBlob], fname, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Rent Receipt' });
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') return; // user closed the share sheet
+        }
+      }
+      const a = document.createElement('a');
+      a.href = receiptUrl; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      toast('Receipt card download ho gaya. WhatsApp chat me attach karke bhejo.');
+      if (r.phone) window.open(`https://wa.me/${waPhone(r)}`, '_blank', 'noopener');
+    }
+
+    $('#closeReceipt').addEventListener('click', () => receiptDlg.close());
+    receiptDlg.addEventListener('click', e => { if (e.target === receiptDlg) receiptDlg.close(); });
+    $('#sendReceiptWhatsApp').addEventListener('click', sendReceiptCard);
+
+    const paymentDlg = $('#paymentDialog');
+    const paymentForm = $('#paymentForm');
+    const historyDlg = $('#historyDialog');
+
+    function openPayment(id) {
+      const r = rooms.find(x => x.id === id);
+      if (!r || !isOccupied(r)) return;
+      paymentForm.reset();
+      paymentForm.elements.roomId.value = r.id;
+      paymentForm.elements.amount.value = outstandingRent(r) || r.rent;
+      paymentForm.elements.date.value = iso(new Date());
+      $('#paymentSubtitle').textContent = `${r.tenant} • Room ${r.room} • Current-month balance: ${inr(outstandingRent(r))}`;
+      $('#paymentError').classList.add('hidden');
+      paymentDlg.showModal();
+      paymentForm.elements.amount.focus();
+    }
+
+    paymentForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const f = paymentForm.elements;
+      const r = rooms.find(x => x.id === f.roomId.value);
+      const amount = Number(f.amount.value);
+      if (!r || !(amount > 0) || !f.date.value) {
+        $('#paymentError').textContent = 'Enter a valid payment amount and date.';
+        $('#paymentError').classList.remove('hidden');
+        return;
+      }
+      const currentPayments = Array.isArray(r.payments) ? [...r.payments] : [];
+      const newPayment = {
+        id: uid(),
+        date: f.date.value,
+        amount,
+        method: f.method.value,
+        note: f.note.value.trim()
+      };
+      currentPayments.push(newPayment);
+
+      const isMonthFullyPaid = (currentMonthPaid({ ...r, payments: currentPayments }) >= Number(r.rent));
+      const paidMonth = isMonthFullyPaid ? monthKey(new Date()) : null;
+
+      try {
+        await updateDoc(doc(db, "rooms", r.id), {
+          payments: currentPayments,
+          paidMonth: paidMonth
+        });
+        paymentDlg.close();
+        toast(`${inr(amount)} payment recorded for ${r.tenant}`);
+        showReceiptModal(r, newPayment);
+      } catch (err) {
+        alert("Error adding payment: " + err.message);
+      }
+    });
+
+    $('#cancelPayment').addEventListener('click', () => paymentDlg.close());
+    paymentDlg.addEventListener('click', e => { if (e.target === paymentDlg) paymentDlg.close(); });
+
+    function openHistory(id) {
+      const r = rooms.find(x => x.id === id);
+      if (r) {
+        const rows = paymentRows(r).map(p => ({ ...p, room: r.room, tenant: r.tenant }))
+          .sort((a,b) => String(b.date).localeCompare(String(a.date)));
+        $('#fullHistoryBody').innerHTML = paymentTableHTML(rows);
+      } else {
+        $('#fullHistoryBody').innerHTML = paymentTableHTML(allPayments());
+      }
+      historyDlg.showModal();
+    }
+    function openTenantHistory(t) {
+      const rows = tenantPayments(t).map(p => ({ ...p, room: t.room, tenant: t.name }))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      $('#fullHistoryBody').innerHTML = rows.length
+        ? paymentTableHTML(rows)
+        : '<tr><td class="td text-muted" colspan="6">No payments recorded.</td></tr>';
+      historyDlg.showModal();
+    }
+    $('#closeHistory').addEventListener('click', () => historyDlg.close());
+    $('#closeHistory2').addEventListener('click', () => historyDlg.close());
+    historyDlg.addEventListener('click', e => { if (e.target === historyDlg) historyDlg.close(); });
+
+    document.addEventListener('click', async e => {
+      const chip = e.target.closest('[data-filter]');
+      if (chip) { filter = chip.dataset.filter; render(); return; }
+
+      const rchip = e.target.closest('[data-recfilter]');
+      if (rchip) { recFilter = rchip.dataset.recfilter; renderRecords(); return; }
+
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+
+      if (btn.dataset.action.startsWith('rec-')) {
+        const t = tenantRecords.find(x => x.id === btn.dataset.id);
+        if (!t) return;
+        if (btn.dataset.action === 'rec-view-img' && (t.aadharPic || t.aadharPic2)) openImageModal([t.aadharPic, t.aadharPic2], t.name);
+        if (btn.dataset.action === 'rec-history') openTenantHistory(t);
+        if (btn.dataset.action === 'rec-delete') {
+          themedConfirm(`Permanently delete ${t.name}'s record (details, ID proof photos and payment history)? This cannot be undone.`, 'Delete tenant record').then(async ok => {
+            if (!ok) return;
+            try {
+              await deleteDoc(doc(db, "tenants", t.id));
+              toast(`${t.name}'s record deleted`);
+            } catch (err) {
+              alert("Error deleting record: " + err.message);
+            }
+          });
+        }
+        return;
+      }
+
+      const r = rooms.find(x => x.id === btn.dataset.id);
+      if (!r) return;
+
+      switch (btn.dataset.action) {
+        case 'view-img':
+          if (r.aadharPic || r.aadharPic2) openImageModal([r.aadharPic, r.aadharPic2], r.tenant);
+          break;
+        case 'edit':
+          openForm(r.id);
+          break;
+        case 'paid': {
+          const currentPayments = Array.isArray(r.payments) ? [...r.payments] : [];
+          const balance = outstandingRent(r);
+          if (balance > 0) {
+            currentPayments.push({ id: uid(), date: iso(new Date()), amount: balance, method: 'Other', note: 'Marked paid for current month' });
+          }
+          await updateDoc(doc(db, "rooms", r.id), {
+            payments: currentPayments,
+            paidMonth: monthKey(new Date())
+          });
+          toast(`Room ${r.room} marked as paid`);
+          break;
+        }
+        case 'payment':
+          openPayment(r.id);
+          break;
+        case 'history':
+          openHistory(r.id);
+          break;
+        case 'whatsapp':
+          whatsappDue(r);
+          break;
+        case 'receipt': {
+          const p = lastPaymentFor(r);
+          if (p) showReceiptModal(r, p);
+          break;
+        }
+        case 'vacate': {
+          const note = r.deposit ? ` Remember to settle the ${inr(r.deposit)} security deposit.` : '';
+          themedConfirm(`Vacate Room ${r.room}? ${r.tenant}'s details will stay saved in Tenant Records.${note}`, 'Vacate room').then(async ok => {
+            if (!ok) return;
+            try {
+              await archiveTenant(r); // save first; room is only cleared if this succeeds
+              await updateDoc(doc(db, "rooms", r.id), {
+                tenant: '', phone: '', careOfName: '', careOfPhone: '', aadharPic: '', aadharPic2: '', deposit: 0, joinDate: '', paidMonth: null, tenantId: null, payments: []
+              });
+              toast(`Room ${r.room} is now vacant`);
+            } catch (err) {
+              alert("Could not vacate. Tenant record was not saved, so nothing was removed.\n" + err.message);
+            }
+          });
+          break;
+        }
+        case 'delete':
+          themedConfirm(isOccupied(r)
+            ? `Delete Room ${r.room}? ${r.tenant}'s details will stay saved in Tenant Records.`
+            : `Delete Room ${r.room} permanently?`, 'Delete room').then(async ok => {
+            if (!ok) return;
+            try {
+              if (isOccupied(r)) await archiveTenant(r);
+              await deleteDoc(doc(db, "rooms", r.id));
+              toast(`Room ${r.room} deleted`);
+            } catch (err) {
+              alert("Error deleting room: " + err.message);
+            }
+          });
+          break;
+      }
+    });
+
+    $('#resetBtn').addEventListener('click', () => {
+      themedConfirm('Delete all rooms and their rent payments? Tenant details stay saved in Tenant Records until you delete them there.', 'Clear all rooms').then(async ok => {
+        if (!ok) return;
+        try {
+          const querySnapshot = await getDocs(roomsRef);
+          for (const d of querySnapshot.docs) {
+            const r = { id: d.id, ...d.data() };
+            if (isOccupied(r)) await archiveTenant(r);
+            await deleteDoc(doc(db, "rooms", d.id));
+          }
+          toast('All rooms cleared. Tenant Records kept');
+        } catch (err) {
+          alert("Error clearing data: " + err.message);
+        }
+      });
+    });
+
+    /* ---------- Real-time Firebase Listener with Auth Check ---------- */
+    $('#monthLabel').textContent = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        onSnapshot(roomsRef, (snapshot) => {
+          rooms = [];
+          snapshot.forEach((docSnap) => {
+            rooms.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          render();
+          migrateLegacyTenants();
+        }, (err) => {
+          console.error("Firestore snapshot error:", err);
+        });
+        onSnapshot(tenantsRef, (snapshot) => {
+          tenantRecords = [];
+          snapshot.forEach((docSnap) => {
+            tenantRecords.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          render();
+        }, (err) => {
+          console.error("Tenant records snapshot error:", err);
+          toast('Tenant Records: permission denied. Update Firestore rules.');
+        });
+      }
+    });
+  </script>
+</body>
+</html>
